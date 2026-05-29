@@ -177,3 +177,12 @@ class Chess:
             checkBoard[3, start[1]] = checkBoard[0, start[1]]
             checkBoard[0, start[1]] = None
         return not Chess.in_check(checkBoard, self.white_move)
+    
+    # Generates a list of all legal moves that the current player can play as (start, dest) pairs
+    def all_moves(self):
+        return []
+    
+    # Plays a move if it is legal
+    # Updates all tracking attributes as necessary
+    def play_move(self, start, dest):
+        return []
