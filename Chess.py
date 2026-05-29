@@ -4,17 +4,13 @@ class Chess:
     def __init__(self, test_setup=None):
         self.board = np.full((8, 8), None, dtype=object) # 8 x 8 board, None for empty squares, (piece, color) tuple for filles squares where White = True, Black = False, and indexed by file-rank (C7 => [2, 6])
         self.white_move = True # Move tracker
-        self.check = False # Is the current player's king in check?
-        self.castle_rights = ((True, True), (True, True)) # Can players castle? ((White can castle short, White can castle long), (Black can castle short, Black can castle long))
+        self.castle_rights = [[True, True], [True, True]] # Can players castle? ((White can castle short, White can castle long), (Black can castle short, Black can castle long))
         self.en_passant = False # If the other player just (on the last move) pushed a pawn two squares, this is equal to the file of that move, otherwise it is False
-        self.checkmate = False # Is the current player's king in checkmate?
         if test_setup:
             self.board = test_setup[0]
             self.white_move = test_setup[1]
-            self.check = test_setup[2]
-            self.castle_rights = test_setup[3]
-            self.en_passant = test_setup[4]
-            self.checkmate = test_setup[5]
+            self.castle_rights = test_setup[2]
+            self.en_passant = test_setup[3]
         else:
             self.board[0, 0] = self.board[7, 0] = ("R", True)
             self.board[1, 0] = self.board[6, 0] = ("N", True)
@@ -31,7 +27,7 @@ class Chess:
     
     def __str__(self):
         out = "\x1b[31m"
-        out += ("0-1" if self.white_move else "1-0") if self.checkmate else "White To Move" if self.white_move else "Black to Move"
+        out += "White\'s Turn" if self.white_move else "Black\'s Turn"
         out += "\x1b[0m\n"
         for i in range(7, -1, -1):
             out += "\x1b[31m" + str(i + 1) + "\x1b[0m"
@@ -115,8 +111,12 @@ class Chess:
 
     # Determines if a proposed move is legal
     # Assumes start and destination are valid board sqaures
-    def legal_move(self, start, dest):
+    def legal_move(self, start, dest, promotion=False):
         piece = self.board[start][0]
+        if promotion and (piece != "P" or promotion not in ["Q", "R", "B", "N"] or dest[1] not in [0, 7]):
+            return False
+        if piece == "P" and dest[1] in [0, 7] and not promotion:
+            return False
         distX = dest[0] - start[0]
         distY = dest[1] - start[1]
         if self.white_move != self.board[start][1] or not Chess.ideally_reachable(piece, start, distX, distY, self.white_move):
@@ -178,17 +178,54 @@ class Chess:
             checkBoard[0, start[1]] = None
         return not Chess.in_check(checkBoard, self.white_move)
     
-    # Generates a list of all legal moves that the current player can play as (start, dest) pairs
+    # Generates a list of all legal moves that the current player can play as (start, dest, promotion) triples
     def all_moves(self):
         moves = []
         for start, square in np.ndenumerate(self.board):
             if square and square[1] == self.white_move:
                 for dest in np.ndindex(self.board.shape):
-                    if self.legal_move(start, dest):
-                        moves.append((start, dest))
+                    if square[0] == "P" and dest[1] in [0, 7]:
+                        for promotion in ["Q", "R", "B", "N"]:
+                            if self.legal_move(start, dest, promotion):
+                                moves.append((start, dest, promotion))
+                    else:
+                        if self.legal_move(start, dest):
+                            moves.append((start, dest, False))
         return moves
     
     # Plays a move if it is legal, returning true if successful
     # Updates all tracking attributes as necessary
-    def play_move(self, start, dest):
+    def play_move(self, start, dest, promotion=False):
+        if self.legal_move(start, dest, promotion):
+            self.play_unchecked_move(start, dest, promotion)
+            return True
         return False
+    
+    # Plays a move without checking if it is legal
+    # Updates all tracking attributes as necessary
+    def play_unchecked_move(self, start, dest, promotion=False):
+        self.en_passant = False
+        if self.board[start][0] == "P":
+            if start[0] - dest[0] != 0 and self.board[dest] == None:
+                self.board[dest[0], start[1]] = None
+            if abs(start[1] - dest[1]) == 2:
+                self.en_passant = start[0]
+        if self.board[start][0] == "K":
+            self.castle_rights[0 if self.white_move else 1] = [False, False]
+            if dest[0] - start[0] == 2:
+                self.board[5, start[1]] = self.board[7, start[1]]
+                self.board[7, start[1]] = None
+            if dest[0] - start[0] == -2:
+                self.board[3, start[1]] = self.board[0, start[1]]
+                self.board[0, start[1]] = None
+        if self.board[start][0] == "R":
+            if start[0] in [0, 7]:
+                self.castle_rights[0 if self.white_move else 1][0 if start[0] == 7 else 1] = False
+        if self.board[dest] and self.board[dest][0] == "R":
+            if dest[0] in [0, 7]:
+                self.castle_rights[1 if self.white_move else 0][0 if dest[0] == 7 else 1] = False
+        self.board[dest] = self.board[start]
+        self.board[start] = None
+        if promotion:
+            self.board[dest] = (promotion, self.board[dest][1])
+        self.white_move = not self.white_move
