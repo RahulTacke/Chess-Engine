@@ -182,7 +182,7 @@ class Chess:
     def all_moves(self):
         return []
     
-    # Plays a move if it is legal
+    # Plays a move if it is legal, returning true if successful
     # Updates all tracking attributes as necessary
     def play_move(self, start, dest):
-        return []
+        return False
