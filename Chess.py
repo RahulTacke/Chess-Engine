@@ -180,7 +180,13 @@ class Chess:
     
     # Generates a list of all legal moves that the current player can play as (start, dest) pairs
     def all_moves(self):
-        return []
+        moves = []
+        for start, square in np.ndenumerate(self.board):
+            if square and square[1] == self.white_move:
+                for dest in np.ndindex(self.board.shape):
+                    if self.legal_move(start, dest):
+                        moves.append((start, dest))
+        return moves
     
     # Plays a move if it is legal, returning true if successful
     # Updates all tracking attributes as necessary
