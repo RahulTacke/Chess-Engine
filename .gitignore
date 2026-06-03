@@ -1,1 +1,7 @@
 .DS_Store
+DataAndParser/dataset_0.npz
+DataAndParser/dataset_1.npz
+DataAndParser/dataset_2.npz
+DataAndParser/dataset_3.npz
+DataAndParser/dataset_4.npz
+DataAndParser/lichessdata.pgn.zst
