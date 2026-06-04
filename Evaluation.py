@@ -7,7 +7,7 @@ class Evaluation(nn.Module):
         super().__init__()
 
         #Convolutional Layers
-        self.conv1 = nn.Conv2d(in_channels=6, out_channels=16, kernel_size=3, padding=1)
+        self.conv1 = nn.Conv2d(in_channels=8, out_channels=16, kernel_size=3, padding=1)
         self.conv2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, padding=1)
         self.conv3 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1)
         self.conv4 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, padding=1)
