@@ -148,12 +148,14 @@ def alpha_beta(game: Chess, depth: int, alpha: float, beta: float, maximizing: b
     castle_snapshot   = [list(row) for row in game.castle_rights]
     ep_snapshot       = game.en_passant
     white_move_snap   = game.white_move
+    king_snap         = list(game.king_locations)
 
     def restore():
-        game.board         = board_snapshot.copy()
-        game.castle_rights = [list(row) for row in castle_snapshot]
-        game.en_passant    = ep_snapshot
-        game.white_move    = white_move_snap
+        game.board          = board_snapshot.copy()
+        game.castle_rights  = [list(row) for row in castle_snapshot]
+        game.en_passant     = ep_snapshot
+        game.white_move     = white_move_snap
+        game.king_locations = list(king_snap)
 
     # ── MAX node (White to move) ──────────────────────────────────────
     if maximizing:
@@ -200,12 +202,14 @@ def best_move(game: Chess, depth: int = 3):
     castle_snapshot   = [list(row) for row in game.castle_rights]
     ep_snapshot       = game.en_passant
     white_move_snap   = game.white_move
+    king_snap         = list(game.king_locations)
 
     def restore():
-        game.board         = board_snapshot.copy()
-        game.castle_rights = [list(row) for row in castle_snapshot]
-        game.en_passant    = ep_snapshot
-        game.white_move    = white_move_snap
+        game.board          = board_snapshot.copy()
+        game.castle_rights  = [list(row) for row in castle_snapshot]
+        game.en_passant     = ep_snapshot
+        game.white_move     = white_move_snap
+        game.king_locations = list(king_snap)
 
     for start, dest, promo in moves:
         game.play_unchecked_move(start, dest, promo)

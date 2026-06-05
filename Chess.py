@@ -26,6 +26,11 @@ class Chess:
             self.board[:, 6] = [("P", False)] * 8
         self.piece_movements = self._precompute_piece_movements()
         self.attack_directions = self._precompute_attack_directions()
+        self.king_locations = [(4, 0), (4, 7)]
+        if test_setup:
+            for loc, square in np.ndenumerate(self.board):
+                if square and square[0] == "K":
+                    self.king_locations[int(not square[1])] = loc
     
     def __str__(self):
         out = "\x1b[31m"
@@ -72,34 +77,34 @@ class Chess:
 
     # Determines if the specified color is in check on a given board
     @staticmethod
-    def in_check(board, color, attack_directions):
-        for loc, square in np.ndenumerate(board):
-            if square and square[0] == "K" and square[1] == color:
-                (kingX, kingY) = loc
-                break
-        for (file, rank) in attack_directions[kingX][kingY]:
+    def in_check(board, color, attack_directions, kingLocation):
+        for (file, rank) in attack_directions[kingLocation[0]][kingLocation[1]]:
             square = board[file, rank]
             if square and square[1] != color:
                 match square[0]:
                     case "Q" | "R" | "B":
-                        directions = []
-                        match square[0]:
-                            case "Q":
-                                directions += [(-1, -1), (-1, 1), (1, -1), (1, 1), (-1, 0), (1, 0), (0, -1), (0, 1)]
-                            case "R":
-                                directions += [(-1, 0), (1, 0), (0, -1), (0, 1)]
-                            case "B":
-                                directions += [(-1, -1), (-1, 1), (1, -1), (1, 1)]
-                        for direction in directions:
-                            for i in range(1, 8):
-                                x = file + direction[0] * i
-                                y = rank + direction[1] * i
-                                if x in [-1, 8] or y in [-1, 8]:
-                                    break
-                                if board[x, y]:
-                                    if board[x, y] == ("K", color):
-                                        return True
-                                    break
+                        displacement = (kingLocation[0] - file, kingLocation[1] - rank)
+                        if displacement not in [(-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1)]:
+                            directions = []
+                            match square[0]:
+                                case "Q":
+                                    directions += [(-1, -1), (-1, 1), (1, -1), (1, 1), (-1, 0), (1, 0), (0, -1), (0, 1)]
+                                case "R":
+                                    directions += [(-1, 0), (1, 0), (0, -1), (0, 1)]
+                                case "B":
+                                    directions += [(-1, -1), (-1, 1), (1, -1), (1, 1)]
+                            factor = max(abs(displacement[0]), abs(displacement[1]))
+                            direction = (int(displacement[0]/factor), int(displacement[1]/factor))
+                            if direction in directions:
+                                for i in range(1, 8):
+                                    x = file + direction[0] * i
+                                    y = rank + direction[1] * i
+                                    if x in [-1, 8] or y in [-1, 8]:
+                                        break
+                                    if board[x, y]:
+                                        if board[x, y] == ("K", color):
+                                            return True
+                                        break
                     case "K" | "N" | "P":
                         targets = []
                         match square[0]:
@@ -109,11 +114,8 @@ class Chess:
                                 targets = [(-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1)]
                             case "P":
                                 targets = [(-1, -1), (1, -1)] if color else [(-1, 1), (1, 1)]
-                        for target in targets:
-                            x = file + target[0]
-                            y = rank + target[1]
-                            if x >= 0 and y >= 0 and x < 8 and y < 8 and board[x, y] and board[x, y] == ("K", color):
-                                return True
+                        if (kingLocation[0] - file, kingLocation[1] - rank) in targets:
+                            return True
         return False                    
 
     # Determines if a proposed move is legal
@@ -154,7 +156,7 @@ class Chess:
                 checkBoard[dest[0], start[1]] = None
             checkBoard[dest] = checkBoard[start]
             checkBoard[start] = None
-            return not Chess.in_check(checkBoard, self.white_move, self.attack_directions)
+            return not Chess.in_check(checkBoard, self.white_move, self.attack_directions, dest if piece == "K" else self.king_locations[0 if self.board[start][1] else 1])
         if not self.castle_rights[0 if self.white_move else 1][0 if distX == 2 else 1]:
             return False
         if distX == 2:
@@ -165,7 +167,7 @@ class Chess:
             for i in range(1, 4):
                 if self.board[i, start[1]]:
                     return False
-        if Chess.in_check(self.board, self.white_move, self.attack_directions):
+        if Chess.in_check(self.board, self.white_move, self.attack_directions, self.king_locations[0 if self.board[start][1] else 1]):
             return False
         checkBoard = self.board.copy()
         if distX == 2:
@@ -173,7 +175,7 @@ class Chess:
         else:
             checkBoard[3, start[1]] = checkBoard[start]
         checkBoard[start] = None
-        if Chess.in_check(checkBoard, self.white_move, self.attack_directions):
+        if Chess.in_check(checkBoard, self.white_move, self.attack_directions, (5, start[1]) if distX == 2 else (3, start[1])):
             return False
         if distX == 2:
             checkBoard[6, start[1]] = self.board[start]
@@ -183,7 +185,7 @@ class Chess:
             checkBoard[2, start[1]] = self.board[start]
             checkBoard[3, start[1]] = checkBoard[0, start[1]]
             checkBoard[0, start[1]] = None
-        return not Chess.in_check(checkBoard, self.white_move, self.attack_directions)
+        return not Chess.in_check(checkBoard, self.white_move, self.attack_directions, dest)
     
     # Generates a list of all legal moves that the current player can play as (start, dest, promotion) triples
     def all_moves(self):
@@ -229,6 +231,7 @@ class Chess:
             if dest[0] - start[0] == -2:
                 self.board[3, start[1]] = self.board[0, start[1]]
                 self.board[0, start[1]] = None
+            self.king_locations[0 if self.board[start][1] else 1] = dest
         if self.board[start][0] == "R":
             if start[0] in [0, 7]:
                 self.castle_rights[0 if self.white_move else 1][0 if start[0] == 7 else 1] = False
