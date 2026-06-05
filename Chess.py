@@ -24,6 +24,8 @@ class Chess:
             self.board[3, 7] = ("Q", False)
             self.board[4, 7] = ("K", False)
             self.board[:, 6] = [("P", False)] * 8
+        self.piece_movements = self._precompute_piece_movements()
+        self.attack_directions = self._precompute_attack_directions()
     
     def __str__(self):
         out = "\x1b[31m"
@@ -70,8 +72,13 @@ class Chess:
 
     # Determines if the specified color is in check on a given board
     @staticmethod
-    def in_check(board, color):
-        for (file, rank), square in np.ndenumerate(board):
+    def in_check(board, color, attack_directions):
+        for loc, square in np.ndenumerate(board):
+            if square and square[0] == "K" and square[1] == color:
+                (kingX, kingY) = loc
+                break
+        for (file, rank) in attack_directions[kingX][kingY]:
+            square = board[file, rank]
             if square and square[1] != color:
                 match square[0]:
                     case "Q" | "R" | "B":
@@ -147,7 +154,7 @@ class Chess:
                 checkBoard[dest[0], start[1]] = None
             checkBoard[dest] = checkBoard[start]
             checkBoard[start] = None
-            return not Chess.in_check(checkBoard, self.white_move)
+            return not Chess.in_check(checkBoard, self.white_move, self.attack_directions)
         if not self.castle_rights[0 if self.white_move else 1][0 if distX == 2 else 1]:
             return False
         if distX == 2:
@@ -158,7 +165,7 @@ class Chess:
             for i in range(1, 4):
                 if self.board[i, start[1]]:
                     return False
-        if Chess.in_check(self.board, self.white_move):
+        if Chess.in_check(self.board, self.white_move, self.attack_directions):
             return False
         checkBoard = self.board.copy()
         if distX == 2:
@@ -166,7 +173,7 @@ class Chess:
         else:
             checkBoard[3, start[1]] = checkBoard[start]
         checkBoard[start] = None
-        if Chess.in_check(checkBoard, self.white_move):
+        if Chess.in_check(checkBoard, self.white_move, self.attack_directions):
             return False
         if distX == 2:
             checkBoard[6, start[1]] = self.board[start]
@@ -176,14 +183,18 @@ class Chess:
             checkBoard[2, start[1]] = self.board[start]
             checkBoard[3, start[1]] = checkBoard[0, start[1]]
             checkBoard[0, start[1]] = None
-        return not Chess.in_check(checkBoard, self.white_move)
+        return not Chess.in_check(checkBoard, self.white_move, self.attack_directions)
     
     # Generates a list of all legal moves that the current player can play as (start, dest, promotion) triples
     def all_moves(self):
         moves = []
         for start, square in np.ndenumerate(self.board):
             if square and square[1] == self.white_move:
-                for dest in np.ndindex(self.board.shape):
+                if square[0] == "P":
+                    i = 5 if self.white_move else 6
+                else:
+                    i = ["K", "Q", "R", "B", "N"].index(square[0])
+                for dest in self.piece_movements[start[0]][start[1]][i]:
                     if square[0] == "P" and dest[1] in [0, 7]:
                         for promotion in ["Q", "R", "B", "N"]:
                             if self.legal_move(start, dest, promotion):
@@ -229,3 +240,67 @@ class Chess:
         if promotion:
             self.board[dest] = (promotion, self.board[dest][1])
         self.white_move = not self.white_move
+
+    def _precompute_piece_movements(self):
+        piece_movements = [[[[] for i in range(7)] for j in range(8)] for k in range(8)]
+
+        for file, rank in np.ndindex(self.board.shape):
+            piece_movements[file][rank][0] = [(-1, -1), (-1, 1), (1, -1), (1, 1), (-1, 0), (1, 0), (0, -1), (0, 1)]
+            if file == 4 and rank in [0, 7]:
+                piece_movements[file][rank][0].append((-2, 0))
+                piece_movements[file][rank][0].append((2, 0))
+            for i in range(1, 8):
+                for j in [1, 2]:
+                    piece_movements[file][rank][j].append((-i, 0))
+                    piece_movements[file][rank][j].append((0, -i))
+                    piece_movements[file][rank][j].append((0, i))
+                    piece_movements[file][rank][j].append((i, 0))
+                for j in [1, 3]:
+                    piece_movements[file][rank][j].append((-i, -i))
+                    piece_movements[file][rank][j].append((-i, i))
+                    piece_movements[file][rank][j].append((i, -i))
+                    piece_movements[file][rank][j].append((i, i))
+            piece_movements[file][rank][4] = [(-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1)]
+            if rank > 0:
+                piece_movements[file][rank][5] = [(-1, 1), (0, 1), (1, 1)]
+            if rank == 1:
+                piece_movements[file][rank][5].append((0, 2))
+            if rank < 7:
+                piece_movements[file][rank][6] = [(-1, -1), (0, -1), (1, -1)]
+            if rank == 6:
+                piece_movements[file][rank][6].append((0, -2))
+        for file, rank in np.ndindex(self.board.shape):
+            for i in range(7):
+                remList = []
+                for j in range(len(piece_movements[file][rank][i])):
+                    dest = (file + piece_movements[file][rank][i][j][0], rank + piece_movements[file][rank][i][j][1])
+                    if dest[0] < 0 or dest[0] > 7 or dest[1] < 0 or dest[1] > 7:
+                        remList.append(piece_movements[file][rank][i][j])
+                    else:
+                        piece_movements[file][rank][i][j] = dest
+                for element in remList:
+                    piece_movements[file][rank][i].remove(element)
+        
+        return piece_movements
+    
+    def _precompute_attack_directions(self):
+        attack_directions = [[[] for j in range(8)] for k in range(8)]
+
+        for file, rank in np.ndindex(self.board.shape):
+            for loc in [(-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1)]:
+                x = file + loc[0]
+                y = rank + loc[1]
+                if not (x < 0 or x > 7 or y < 0 or y > 7):
+                    attack_directions[file][rank].append((x, y))
+            for i in range(0, 8):
+                if i != file:
+                    attack_directions[file][rank].append((i, rank))
+                if i != rank:
+                    attack_directions[file][rank].append((file, i))
+                if i != 0:
+                    for dir in [(-1, -1), (-1, 1), (1, -1), (1, 1)]:
+                        x = file + i * dir[0]
+                        y = rank + i * dir[1]
+                        if not (x < 0 or x > 7 or y < 0 or y > 7):
+                            attack_directions[file][rank].append((x, y))
+        return attack_directions
