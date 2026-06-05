@@ -128,7 +128,7 @@ class Chess:
             return False
         distX = dest[0] - start[0]
         distY = dest[1] - start[1]
-        if self.white_move != self.board[start][1] or not Chess.ideally_reachable(piece, start, distX, distY, self.white_move):
+        if self.white_move != self.board[start][1]:
             return False
         if piece == "P" and (distX == 0) == (bool(self.board[dest]) or (self.en_passant == dest[0] and (start[1] == 4 if self.white_move else start[1] == 3))):
             return False
