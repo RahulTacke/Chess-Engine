@@ -149,6 +149,7 @@ def alpha_beta(game: Chess, depth: int, alpha: float, beta: float, maximizing: b
     ep_snapshot       = game.en_passant
     white_move_snap   = game.white_move
     king_snap         = list(game.king_locations)
+    tensor_snap       = game.tensor.copy()
 
     def restore():
         game.board          = board_snapshot.copy()
@@ -156,6 +157,7 @@ def alpha_beta(game: Chess, depth: int, alpha: float, beta: float, maximizing: b
         game.en_passant     = ep_snapshot
         game.white_move     = white_move_snap
         game.king_locations = list(king_snap)
+        game.tensor         = tensor_snap.copy()
 
     # ── MAX node (White to move) ──────────────────────────────────────
     if maximizing:
@@ -203,6 +205,7 @@ def best_move(game: Chess, depth: int = 3):
     ep_snapshot       = game.en_passant
     white_move_snap   = game.white_move
     king_snap         = list(game.king_locations)
+    tensor_snap       = game.tensor.copy()
 
     def restore():
         game.board          = board_snapshot.copy()
@@ -210,6 +213,7 @@ def best_move(game: Chess, depth: int = 3):
         game.en_passant     = ep_snapshot
         game.white_move     = white_move_snap
         game.king_locations = list(king_snap)
+        game.tensor         = tensor_snap.copy()
 
     for start, dest, promo in moves:
         game.play_unchecked_move(start, dest, promo)
