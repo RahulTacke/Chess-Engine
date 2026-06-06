@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 
 class Chess:
     def __init__(self, test_setup=None):
@@ -31,6 +32,7 @@ class Chess:
             for loc, square in np.ndenumerate(self.board):
                 if square and square[0] == "K":
                     self.king_locations[int(not square[1])] = loc
+        self.tensor = self._precompute_tensor()
     
     def __str__(self):
         out = "\x1b[31m"
@@ -217,31 +219,43 @@ class Chess:
     # Plays a move without checking if it is legal
     # Updates all tracking attributes as necessary
     def play_unchecked_move(self, start, dest, promotion=False):
-        self.en_passant = False
+        if self.en_passant:
+            self.tensor[7, self.en_passant, :] = 0
+            self.en_passant = False
         if self.board[start][0] == "P":
             if start[0] - dest[0] != 0 and self.board[dest] == None:
                 self.board[dest[0], start[1]] = None
+                self.tensor[5, dest[0], start[1]] = 0
             if abs(start[1] - dest[1]) == 2:
                 self.en_passant = start[0]
+                self.tensor[7, self.en_passant, :] = -1 if self.white_move else 1
         if self.board[start][0] == "K":
             self.castle_rights[0 if self.white_move else 1] = [False, False]
+            self.tensor[6, [0, 7], 0 if self.white_move else 7] = 0
             if dest[0] - start[0] == 2:
                 self.board[5, start[1]] = self.board[7, start[1]]
                 self.board[7, start[1]] = None
+                self.tensor[2, 7, start[1]] = 0
+                self.tensor[2, 5, start[1]] = 1 if self.white_move else -1
             if dest[0] - start[0] == -2:
                 self.board[3, start[1]] = self.board[0, start[1]]
                 self.board[0, start[1]] = None
+                self.tensor[2, 0, start[1]] = 0
+                self.tensor[2, 3, start[1]] = 1 if self.white_move else -1
             self.king_locations[0 if self.board[start][1] else 1] = dest
-        if self.board[start][0] == "R":
-            if start[0] in [0, 7]:
+        if self.board[start][0] == "R" and start[0] in [0, 7] and start[1] in [0, 7]:
                 self.castle_rights[0 if self.white_move else 1][0 if start[0] == 7 else 1] = False
-        if self.board[dest] and self.board[dest][0] == "R":
-            if dest[0] in [0, 7]:
+                self.tensor[6, start] = 0
+        if self.board[dest] and self.board[dest][0] == "R" and dest[0] in [0, 7] and dest[1] in [0, 7]:
                 self.castle_rights[1 if self.white_move else 0][0 if dest[0] == 7 else 1] = False
+                self.tensor[6, dest] = 0
+        self.tensor[["K", "Q", "R", "B", "N", "P"].index(self.board[start][0]), start] = 0
         self.board[dest] = self.board[start]
         self.board[start] = None
         if promotion:
             self.board[dest] = (promotion, self.board[dest][1])
+        self.tensor[:, dest] = 0
+        self.tensor[["K", "Q", "R", "B", "N", "P"].index(self.board[dest][0]), dest] = 1 if self.white_move else -1
         self.white_move = not self.white_move
 
     def _precompute_piece_movements(self):
@@ -307,3 +321,17 @@ class Chess:
                         if not (x < 0 or x > 7 or y < 0 or y > 7):
                             attack_directions[file][rank].append((x, y))
         return attack_directions
+    
+    def _precompute_tensor(self):
+        tensor = np.zeros((8, 8, 8), dtype=np.float32)
+
+        for (file, rank), square in np.ndenumerate(self.board):
+            if square:
+                tensor[["K", "Q", "R", "B", "N", "P"].index(square[0]), file, rank] = 1 if square[1] else -1
+        for i in range(2):
+            for j in range(2):
+                if self.castle_rights[i][j]:
+                    tensor[6, (1-j) * 7, i * 7] = 1 - 2 * i
+        if self.en_passant:
+            tensor[7, self.en_passant, :] = 1 if self.white_move else -1
+        return tensor
