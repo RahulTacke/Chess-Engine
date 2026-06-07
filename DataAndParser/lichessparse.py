@@ -7,28 +7,30 @@ import zstandard as zstd
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-PIECE_MAP = {
-    (chess.PAWN, chess.WHITE): 0,
-    (chess.KNIGHT, chess.WHITE): 1,
-    (chess.BISHOP, chess.WHITE): 2,
-    (chess.ROOK, chess.WHITE): 3,
-    (chess.QUEEN, chess.WHITE): 4,
-    (chess.KING, chess.WHITE): 5,
-    (chess.PAWN, chess.BLACK): 6,
-    (chess.KNIGHT, chess.BLACK): 7,
-    (chess.BISHOP, chess.BLACK): 8,
-    (chess.ROOK, chess.BLACK): 9,
-    (chess.QUEEN, chess.BLACK): 10,
-    (chess.KING, chess.BLACK): 11,
+PIECE_TO_PLANE = {
+    chess.KING: 0,
+    chess.QUEEN: 1,
+    chess.ROOK: 2,
+    chess.BISHOP: 3,
+    chess.KNIGHT: 4,
+    chess.PAWN: 5,
 }
 
 def boardToTensor(board):
-    tensor = np.zeros((8, 8, 12), dtype=np.int8)
+    tensor = np.zeros((8, 8, 8), dtype=np.int8)
     for piece_type in chess.PIECE_TYPES:
-        for color in chess.COLORS:
-            plane = PIECE_MAP[(piece_type, color)]
-            for square in board.pieces(piece_type, color):
-                tensor[chess.square_file(square), chess.square_rank(square), plane] = 1
+        plane = PIECE_TO_PLANE[piece_type]
+        for square in board.pieces(piece_type, chess.WHITE):
+            tensor[plane, chess.square_file(square), chess.square_rank(square)] = 1
+        for square in board.pieces(piece_type, chess.BLACK):
+            tensor[plane, chess.square_file(square), chess.square_rank(square)] = -1
+    if board.has_kingside_castling_rights(chess.WHITE):  tensor[6, 7, 0] = 1
+    if board.has_queenside_castling_rights(chess.WHITE): tensor[6, 0, 0] = 1
+    if board.has_kingside_castling_rights(chess.BLACK):  tensor[6, 7, 7] = -1
+    if board.has_queenside_castling_rights(chess.BLACK): tensor[6, 0, 7] = -1
+    if board.ep_square is not None:
+        f = chess.square_file(board.ep_square)
+        tensor[7, f, :] = 1 if board.turn == chess.WHITE else -1
     return tensor
 
 boards = []
@@ -57,33 +59,38 @@ def processGame(currentHeaders, currentMoves):
     gameBoards = []
     gameEvals = []
 
-    for moveLine in currentMoves:
-        evalMatches = re.findall(r'\[%eval ([^\]]+)\]', moveLine)
+    movetext = " ".join(currentMoves)
+    moveJustPlayed = False
+    for token in re.finditer(r'\{([^}]*)\}|(\S+)', movetext):
+        comment, word = token.group(1), token.group(2)
 
-        clean = re.sub(r'\{[^}]*\}', '', moveLine)
-        clean = re.sub(r'\d+\.+', '', clean)
-        clean = re.sub(r'[?!]+', '', clean)
-        sanMoves = clean.split()
+        if comment is not None:
+            if moveJustPlayed:
+                m = re.search(r'\[%eval ([^\]]+)\]', comment)
+                if m:
+                    evalStr = m.group(1)
+                    if evalStr.startswith("-#"):
+                        evalVal = -10.0
+                    elif evalStr.startswith("#"):
+                        evalVal = 10.0
+                    else:
+                        evalVal = float(evalStr)
+                    evalVal = max(-10.0, min(10.0, evalVal))
+                    gameBoards.append(boardToTensor(board))
+                    gameEvals.append(evalVal)
+            moveJustPlayed = False
+            continue
 
-        for i, san in enumerate(sanMoves):
-            isWhite = board.turn == chess.WHITE
-            try:
-                board.push_san(san)
-            except:
-                break
-            if i < len(evalMatches):
-                evalStr = evalMatches[i]
-                if evalStr.startswith("-#"):
-                    evalVal = -10.0
-                elif evalStr.startswith("#"):
-                    evalVal = 10.0
-                else:
-                    evalVal = float(evalStr)
-                evalVal = max(-10.0, min(10.0, evalVal))
-                if not isWhite:
-                    evalVal = -evalVal
-                gameBoards.append(boardToTensor(board))
-                gameEvals.append(evalVal)
+        if re.fullmatch(r'\d+\.+', word) or word in ("1-0", "0-1", "1/2-1/2", "*"):
+            continue
+        san = word.rstrip("?!")
+        if not san or san.startswith("$"):
+            continue
+        try:
+            board.push_san(san)
+        except ValueError:
+            break
+        moveJustPlayed = True
 
     if gameEvals:
         boards.extend(gameBoards)

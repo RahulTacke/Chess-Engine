@@ -1,4 +1,6 @@
 .DS_Store
+__pycache__/
+*.pyc
 DataAndParser/dataset_0.npz
 DataAndParser/dataset_1.npz
 DataAndParser/dataset_2.npz

@@ -136,7 +136,8 @@ def alpha_beta(game: Chess, depth: int, alpha: float, beta: float, maximizing: b
     if depth == 0 or not moves:
         if not moves:
             # No legal moves: checkmate or stalemate
-            if Chess.in_check(game.board, game.white_move):
+            if Chess.Chess.in_check(game.board, game.white_move, game.attack_directions,
+                                    game.king_locations[0 if game.white_move else 1]):
                 # Checkmate — return a large score favouring the side that
                 # delivered it.  Adding depth rewards faster mates.
                 return -INF + (10 - depth) if maximizing else INF - (10 - depth)

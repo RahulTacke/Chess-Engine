@@ -219,7 +219,7 @@ class Chess:
     # Plays a move without checking if it is legal
     # Updates all tracking attributes as necessary
     def play_unchecked_move(self, start, dest, promotion=False):
-        if self.en_passant:
+        if self.en_passant is not False:
             self.tensor[7, self.en_passant, :] = 0
             self.en_passant = False
         if self.board[start][0] == "P":
@@ -228,7 +228,6 @@ class Chess:
                 self.tensor[5, dest[0], start[1]] = 0
             if abs(start[1] - dest[1]) == 2:
                 self.en_passant = start[0]
-                self.tensor[7, self.en_passant, :] = -1 if self.white_move else 1
         if self.board[start][0] == "K":
             self.castle_rights[0 if self.white_move else 1] = [False, False]
             self.tensor[6, [0, 7], 0 if self.white_move else 7] = 0
@@ -245,18 +244,20 @@ class Chess:
             self.king_locations[0 if self.board[start][1] else 1] = dest
         if self.board[start][0] == "R" and start[0] in [0, 7] and start[1] in [0, 7]:
                 self.castle_rights[0 if self.white_move else 1][0 if start[0] == 7 else 1] = False
-                self.tensor[6, start] = 0
+                self.tensor[6, start[0], start[1]] = 0
         if self.board[dest] and self.board[dest][0] == "R" and dest[0] in [0, 7] and dest[1] in [0, 7]:
                 self.castle_rights[1 if self.white_move else 0][0 if dest[0] == 7 else 1] = False
-                self.tensor[6, dest] = 0
-        self.tensor[["K", "Q", "R", "B", "N", "P"].index(self.board[start][0]), start] = 0
+                self.tensor[6, dest[0], dest[1]] = 0
+        self.tensor[["K", "Q", "R", "B", "N", "P"].index(self.board[start][0]), start[0], start[1]] = 0
         self.board[dest] = self.board[start]
         self.board[start] = None
         if promotion:
             self.board[dest] = (promotion, self.board[dest][1])
-        self.tensor[:, dest] = 0
-        self.tensor[["K", "Q", "R", "B", "N", "P"].index(self.board[dest][0]), dest] = 1 if self.white_move else -1
+        self.tensor[:, dest[0], dest[1]] = 0
+        self.tensor[["K", "Q", "R", "B", "N", "P"].index(self.board[dest][0]), dest[0], dest[1]] = 1 if self.white_move else -1
         self.white_move = not self.white_move
+        if self.en_passant is not False:
+            self.tensor[7, self.en_passant, :] = 1 if self.white_move else -1
 
     def _precompute_piece_movements(self):
         piece_movements = [[[[] for i in range(7)] for j in range(8)] for k in range(8)]
@@ -332,6 +333,6 @@ class Chess:
             for j in range(2):
                 if self.castle_rights[i][j]:
                     tensor[6, (1-j) * 7, i * 7] = 1 - 2 * i
-        if self.en_passant:
+        if self.en_passant is not False:
             tensor[7, self.en_passant, :] = 1 if self.white_move else -1
         return tensor

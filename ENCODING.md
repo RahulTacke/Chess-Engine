@@ -1,6 +1,6 @@
 # CNN Input Encoding
 
-The model expects a tensor of shape `(batch, 8, 8, 8)` — 8 channels over an 8×8 board — transposed to `(batch, 8, 8, 8)` in PyTorch channel-first format `(batch, C, H, W)`.
+The model expects a tensor of shape `(batch, 8, 8, 8)` in PyTorch channel-first format `(batch, C, H, W)`, where `C` is the channel (plane), `H` is the file, and `W` is the rank. A single position is encoded as `(8, 8, 8)` indexed `[channel, file, rank]` — no transpose is needed before batching.
 
 Board coordinates are `[file, rank]` where file 0–7 = a–h and rank 0–7 = 1–8.
 
@@ -19,12 +19,12 @@ One channel per piece type. Each square contains:
 
 | Channel | Piece |
 |---------|-------|
-| 0 | Pawn |
-| 1 | Knight |
-| 2 | Bishop |
-| 3 | Rook |
-| 4 | Queen |
-| 5 | King |
+| 0 | King |
+| 1 | Queen |
+| 2 | Rook |
+| 3 | Bishop |
+| 4 | Knight |
+| 5 | Pawn |
 
 ---
 
@@ -32,8 +32,8 @@ One channel per piece type. Each square contains:
 
 A single channel encoding all four castling rights. All other squares are 0.
 
-| Square | Coordinates | Value | Meaning |
-|--------|-------------|-------|---------|
+| Square | Coordinates `[file, rank]` | Value | Meaning |
+|--------|----------------------------|-------|---------|
 | h1 | (7, 0) | +1 | White can castle kingside |
 | a1 | (0, 0) | +1 | White can castle queenside |
 | h8 | (7, 7) | −1 | Black can castle kingside |
@@ -46,5 +46,5 @@ A single channel encoding all four castling rights. All other squares are 0.
 If en passant is available, the entire file (column) of the target pawn is marked. All other squares are 0.
 
 The sign reflects whose turn it is (en passant is always capturable by the current player):
-- `+1` in the file column if it is white's turn
-- `−1` in the file column if it is black's turn
+- `+1` across the file if it is white's turn
+- `−1` across the file if it is black's turn
