@@ -185,10 +185,19 @@ def alpha_beta(game: Chess, depth: int, alpha: float, beta: float, maximizing: b
         return beta
 
 
-def best_move(game: Chess, depth: int = 3):
+# ─────────────────────────────────────────────
+# Iterative Deepening
+# ─────────────────────────────────────────────
+
+def best_move(game: Chess, max_depth: int = 4):
     """
     Return the best (start, dest, promotion) triple for the current player
-    using alpha-beta search to the given depth.
+    using iterative deepening alpha-beta search up to max_depth.
+
+    The search proceeds depth-by-depth (1, 2, …, max_depth).  After each
+    completed iteration the best move found is placed first in the move
+    list for the next iteration, improving alpha-beta cut-offs and making
+    each successive search significantly faster in practice.
 
     Returns None if the position has no legal moves (game over).
     """
@@ -197,9 +206,6 @@ def best_move(game: Chess, depth: int = 3):
         return None
 
     maximizing = game.white_move   # White maximises, Black minimises
-    best       = None
-    alpha      = -INF
-    beta       = INF
 
     board_snapshot    = game.board.copy()
     castle_snapshot   = [list(row) for row in game.castle_rights]
@@ -216,19 +222,31 @@ def best_move(game: Chess, depth: int = 3):
         game.king_locations = list(king_snap)
         game.tensor         = tensor_snap.copy()
 
-    for start, dest, promo in moves:
-        game.play_unchecked_move(start, dest, promo)
-        score = alpha_beta(game, depth - 1, alpha, beta, not maximizing)
-        restore()
+    best = moves[0]   # fallback: always have something to return
 
-        if maximizing:
-            if score > alpha:
-                alpha = score
-                best  = (start, dest, promo)
-        else:
-            if score < beta:
-                beta  = score
-                best  = (start, dest, promo)
+    for depth in range(1, max_depth + 1):
+        # Put the previous iteration's best move first to improve pruning
+        ordered_moves = [best] + [m for m in moves if m != best]
+
+        current_best  = ordered_moves[0]
+        alpha         = -INF
+        beta          = INF
+
+        for start, dest, promo in ordered_moves:
+            game.play_unchecked_move(start, dest, promo)
+            score = alpha_beta(game, depth - 1, alpha, beta, not maximizing)
+            restore()
+
+            if maximizing:
+                if score > alpha:
+                    alpha        = score
+                    current_best = (start, dest, promo)
+            else:
+                if score < beta:
+                    beta         = score
+                    current_best = (start, dest, promo)
+
+        best = current_best   # carry the best move into the next iteration
 
     return best
 
@@ -240,8 +258,8 @@ def best_move(game: Chess, depth: int = 3):
 if __name__ == "__main__":
     game = Chess()
     print(game)
-    # Adjust depth search here
-    move = best_move(game, depth=3)
+    # Adjust max search depth here
+    move = best_move(game, max_depth=4)
     files = "ABCDEFGH"
     s, d, p = move
     print(f"\nBest move: {files[s[0]]}{s[1]+1} → {files[d[0]]}{d[1]+1}"
