@@ -1,20 +1,22 @@
 import os
+import sys
 import glob
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset, random_split
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from Evaluation import Evaluation
 
 # ── Config ────────────────────────────────────────────────────────────────────
-EPOCHS       = 10
+EPOCHS       = 50
 BATCH_SIZE   = 512
 LR           = 3e-3
 VAL_SPLIT    = 0.1
-SUBSET       = 500_000   # positions to sample per experiment (None = use all)
-SUBSET_SEED  = 42        # fixed seed for reproducible subset sampling
+SUBSET       = None      # use all available data
 DATA_DIR     = os.path.dirname(os.path.abspath(__file__))
-CHECKPOINT   = os.path.join(os.path.dirname(__file__), 'best_model.pt')
+CHECKPOINT   = os.path.join(DATA_DIR, 'final_model.pt')
 # ─────────────────────────────────────────────────────────────────────────────
 
 device = (
@@ -25,7 +27,7 @@ device = (
 print(f"Device: {device}")
 
 # ── Load data ─────────────────────────────────────────────────────────────────
-HOLDOUT = 'dataset_1.npz'  # held out for final post-experiment testing
+HOLDOUT = 'dataset_1.npz'  # held out for post-training evaluation
 all_chunks = sorted(glob.glob(os.path.join(DATA_DIR, 'dataset_*.npz')))
 chunks = [p for p in all_chunks if os.path.basename(p) != HOLDOUT]
 assert chunks, f"No usable dataset_*.npz files found in {DATA_DIR}"
@@ -39,13 +41,6 @@ for path in chunks:
 
 boards = np.concatenate(all_boards, axis=0)
 evals  = np.concatenate(all_evals,  axis=0)
-
-if SUBSET is not None and SUBSET < len(evals):
-    rng    = np.random.default_rng(SUBSET_SEED)
-    idx    = rng.choice(len(evals), SUBSET, replace=False)
-    boards = boards[idx]
-    evals  = evals[idx]
-
 print(f"Total positions: {len(evals)}")
 
 boards_t = torch.from_numpy(boards).float()
@@ -58,9 +53,9 @@ train_ds, val_ds = random_split(dataset, [train_n, val_n],
                                 generator=torch.Generator().manual_seed(42))
 
 train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True,
-                          num_workers=0, pin_memory=False)
+                          num_workers=2, pin_memory=False)
 val_loader   = DataLoader(val_ds,   batch_size=BATCH_SIZE, shuffle=False,
-                          num_workers=0, pin_memory=False)
+                          num_workers=2, pin_memory=False)
 
 # ── Model ─────────────────────────────────────────────────────────────────────
 model     = Evaluation().to(device)
