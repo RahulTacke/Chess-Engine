@@ -2,7 +2,7 @@ import cProfile
 import pstats
 import io
 import sys
-sys.path.insert(0, '.')
+sys.path.insert(0, '..')
 import Chess
 import AdversialSearch
 
