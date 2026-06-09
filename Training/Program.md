@@ -36,6 +36,27 @@ Modify `Evaluation.py` and/or the hyperparameters at the top of `train.py`.
 - Loss function (MSELoss)
 - Checkpoint saving logic
 
+## Scope
+Only files inside the `Training/` folder may be modified. Do not touch any files
+outside this folder (Chess.py, AdversialSearch.py, DataAndParser/, etc.).
+Do not run `git push` or any command that writes to the remote repository.
+Git commits and all results stay local only.
+Do not modify `Program.md`.
+All output files (checkpoints, logs, etc.) must be written inside `Training/` — do not
+use paths that resolve outside this folder.
+Do not run destructive git operations: `git reset --hard`, `git clean`, or
+`git checkout` on any file outside `Training/`.
+Do not install, upgrade, or remove any Python packages (`pip`, `conda`, etc.).
+Do not change `SUBSET` away from `200_000` or set `EPOCHS` above `10` — experiments
+must complete in under 10 minutes.
+Do not use `../` or any path that resolves outside `Training/`, including in
+`DATA_DIR`, checkpoint paths, or any other file reference.
+Do not execute any script outside `Training/` — do not call `lichessparse.py`,
+`Chess.py`, `AdversialSearch.py`, or any other file in the parent directories.
+Do not delete, overwrite, or modify any dataset files (`dataset_*.npz`) inside
+`Training/` or any file in `DataAndParser/`.
+Do not modify anything inside the `.git/` directory, including config and hooks.
+
 ## Baseline
 Established on the first run. All experiments are judged against the baseline val_loss.
 A change is kept only if it strictly improves val_loss.
