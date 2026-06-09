@@ -39,5 +39,5 @@ class Evaluation(nn.Module):
         x = self.dropout(x)
         x = F.softsign(self.linear3(x))
         x = self.dropout(x)
-        x = self.linear4(x)
+        x = torch.tanh(self.linear4(x))
         return x

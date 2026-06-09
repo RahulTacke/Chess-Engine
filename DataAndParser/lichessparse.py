@@ -1,6 +1,7 @@
 import sys
 import os
 import re
+import math
 import numpy as np
 import chess
 import zstandard as zstd
@@ -17,20 +18,20 @@ PIECE_TO_PLANE = {
 }
 
 def boardToTensor(board):
-    tensor = np.zeros((8, 8, 8), dtype=np.int8)
+    tensor = np.zeros((8, 8, 8), dtype=np.float32)
     for piece_type in chess.PIECE_TYPES:
         plane = PIECE_TO_PLANE[piece_type]
         for square in board.pieces(piece_type, chess.WHITE):
-            tensor[plane, chess.square_file(square), chess.square_rank(square)] = 1
+            tensor[plane, chess.square_file(square), chess.square_rank(square)] = 1.0
         for square in board.pieces(piece_type, chess.BLACK):
-            tensor[plane, chess.square_file(square), chess.square_rank(square)] = -1
-    if board.has_kingside_castling_rights(chess.WHITE):  tensor[6, 7, 0] = 1
-    if board.has_queenside_castling_rights(chess.WHITE): tensor[6, 0, 0] = 1
-    if board.has_kingside_castling_rights(chess.BLACK):  tensor[6, 7, 7] = -1
-    if board.has_queenside_castling_rights(chess.BLACK): tensor[6, 0, 7] = -1
+            tensor[plane, chess.square_file(square), chess.square_rank(square)] = -1.0
+    if board.has_kingside_castling_rights(chess.WHITE):  tensor[6, 7, 0] =  1.0
+    if board.has_queenside_castling_rights(chess.WHITE): tensor[6, 0, 0] =  1.0
+    if board.has_kingside_castling_rights(chess.BLACK):  tensor[6, 7, 7] = -1.0
+    if board.has_queenside_castling_rights(chess.BLACK): tensor[6, 0, 7] = -1.0
     if board.ep_square is not None:
         f = chess.square_file(board.ep_square)
-        tensor[7, f, :] = 1 if board.turn == chess.WHITE else -1
+        tensor[7, f, :] = 1.0 if board.turn == chess.WHITE else -1.0
     return tensor
 
 boards = []
@@ -70,12 +71,11 @@ def processGame(currentHeaders, currentMoves):
                 if m:
                     evalStr = m.group(1)
                     if evalStr.startswith("-#"):
-                        evalVal = -10.0
+                        evalVal = -1.0
                     elif evalStr.startswith("#"):
-                        evalVal = 10.0
+                        evalVal = 1.0
                     else:
-                        evalVal = float(evalStr)
-                    evalVal = max(-10.0, min(10.0, evalVal))
+                        evalVal = math.tanh(float(evalStr) / 4.0)
                     gameBoards.append(boardToTensor(board))
                     gameEvals.append(evalVal)
             moveJustPlayed = False
