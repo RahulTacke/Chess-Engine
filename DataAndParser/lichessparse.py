@@ -6,7 +6,8 @@ import numpy as np
 import chess
 import zstandard as zstd
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
+TRAINING_DIR = os.path.join(SCRIPT_DIR, '..', 'Training')
 
 PIECE_TO_PLANE = {
     chess.KING: 0,
@@ -43,7 +44,7 @@ currentMoves = []
 
 def saveChunk():
     global boards, evals, chunkIndex
-    path = os.path.join(SCRIPT_DIR, f"dataset_{chunkIndex}.npz")
+    path = os.path.join(TRAINING_DIR, f"dataset_{chunkIndex}.npz")
     np.savez(path, boards=np.array(boards), evals=np.array(evals))
     print(f"Saved chunk {chunkIndex} with {len(evals)} positions to {path}")
     boards = []

@@ -9,10 +9,11 @@ from Evaluation import Evaluation
 # ── Config ────────────────────────────────────────────────────────────────────
 EPOCHS       = 10
 BATCH_SIZE   = 512
-LR           = 1e-3
+LR           = 3e-3
 VAL_SPLIT    = 0.1
-SUBSET       = 200_000   # positions to sample per experiment (None = use all)
-DATA_DIR     = os.path.join(os.path.dirname(__file__), '..', 'DataAndParser')
+SUBSET       = 500_000   # positions to sample per experiment (None = use all)
+SUBSET_SEED  = 42        # fixed seed for reproducible subset sampling
+DATA_DIR     = os.path.dirname(os.path.abspath(__file__))
 CHECKPOINT   = os.path.join(os.path.dirname(__file__), 'best_model.pt')
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -24,8 +25,10 @@ device = (
 print(f"Device: {device}")
 
 # ── Load data ─────────────────────────────────────────────────────────────────
-chunks = sorted(glob.glob(os.path.join(DATA_DIR, 'dataset_*.npz')))
-assert chunks, f"No dataset_*.npz files found in {DATA_DIR}"
+HOLDOUT = 'dataset_1.npz'  # held out for final post-experiment testing
+all_chunks = sorted(glob.glob(os.path.join(DATA_DIR, 'dataset_*.npz')))
+chunks = [p for p in all_chunks if os.path.basename(p) != HOLDOUT]
+assert chunks, f"No usable dataset_*.npz files found in {DATA_DIR}"
 
 all_boards, all_evals = [], []
 for path in chunks:
@@ -38,7 +41,8 @@ boards = np.concatenate(all_boards, axis=0)
 evals  = np.concatenate(all_evals,  axis=0)
 
 if SUBSET is not None and SUBSET < len(evals):
-    idx    = np.random.choice(len(evals), SUBSET, replace=False)
+    rng    = np.random.default_rng(SUBSET_SEED)
+    idx    = rng.choice(len(evals), SUBSET, replace=False)
     boards = boards[idx]
     evals  = evals[idx]
 
@@ -54,13 +58,14 @@ train_ds, val_ds = random_split(dataset, [train_n, val_n],
                                 generator=torch.Generator().manual_seed(42))
 
 train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True,
-                          num_workers=4, pin_memory=True)
+                          num_workers=0, pin_memory=False)
 val_loader   = DataLoader(val_ds,   batch_size=BATCH_SIZE, shuffle=False,
-                          num_workers=4, pin_memory=True)
+                          num_workers=0, pin_memory=False)
 
 # ── Model ─────────────────────────────────────────────────────────────────────
 model     = Evaluation().to(device)
-optimizer = torch.optim.Adam(model.parameters(), lr=LR)
+optimizer = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=1e-4)
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS, eta_min=1e-5)
 criterion = nn.MSELoss()
 
 # ── Train ─────────────────────────────────────────────────────────────────────
@@ -86,7 +91,8 @@ for epoch in range(1, EPOCHS + 1):
             val_loss += criterion(model(x), y).item() * len(x)
     val_loss /= val_n
 
-    print(f"Epoch {epoch:3d}  train_loss={train_loss:.6f}  val_loss={val_loss:.6f}")
+    scheduler.step()
+    print(f"Epoch {epoch:3d}  train_loss={train_loss:.6f}  val_loss={val_loss:.6f}  lr={optimizer.param_groups[0]['lr']:.2e}")
 
     if val_loss < best_val:
         best_val = val_loss

@@ -1,0 +1,23 @@
+exp,description,val_loss,kept
+0,"Baseline (no BN, GAP, Adam lr=1e-3 dropout=0.5)",0.168679,yes
+1,BatchNorm2d after each conv layer,0.166324,yes
+2,AdamW weight_decay=1e-4,0.175336,no
+3,ReduceLROnPlateau scheduler patience=2 factor=0.5,0.173486,no
+4,Dropout reduced 0.5->0.3,0.169081,no
+5,Combine (only BN passed - same as Exp 1),0.166324,yes
+6,LR=5e-4,0.176041,no
+7,FC width 128->256->128->64->1,0.171737,no
+8,Batch size 256,0.171705,no
+9,Conv5 output channels 128->256,0.173608,no
+10,Remove dropout after linear3,0.170633,no
+11,Global max pooling instead of GAP,0.172838,no
+12,Dual pooling GAP+GMP concatenated,0.165852,yes
+13,Add 6th conv layer 128->128,0.172993,no
+14,AdamW on best config (BN+dual pooling),0.171304,no
+15,Residual skip on conv5 identity shortcut,0.167728,no
+16,tanh activations in conv layers,0.177186,no
+17,CosineAnnealingLR T_max=10 eta_min=1e-5,0.171823,no
+18,Batch size 1024,0.180439,no
+19,Gradient clipping clip_grad_norm=1.0,0.170299,no
+20,Single dropout after linear1 only,0.171473,no
+21,BN momentum=0.01,0.180736,no

@@ -1,0 +1,20 @@
+exp,description,val_loss,kept
+0,"Baseline (no BN, GAP, Adam lr=1e-3 dropout=0.5) 500K seed=42",0.160459,yes
+R1,BatchNorm2d after each conv layer,0.155481,yes
+R2,Dual pooling GAP+GMP concatenated (no BN),0.158364,no
+R3,BN + dual pooling combined,0.157396,no
+R4,AdamW weight_decay=1e-4 on BN config,0.153305,yes
+R5,ReduceLROnPlateau patience=2 on AdamW+BN,0.156678,no
+R6,Wider conv channels 64->192->192 + BN + AdamW,0.154402,no
+R7,CosineAnnealingLR T_max=10 eta_min=1e-5 + AdamW + BN,0.150874,yes
+R8,Dropout reduced 0.5->0.3,0.149613,yes
+R9,Dropout reduced 0.5->0.2,0.148147,yes
+R10,AdamW weight_decay=1e-3,0.148626,no
+R11,Dropout reduced 0.5->0.1,0.148875,no
+R12,Dual pooling GAP+GMP on full best config,0.147831,yes
+R13,Remove dropout after linear3 only,0.146102,yes
+R14,Dropout only after linear1 (remove from linear2 too),0.147049,no
+R15,LR=2e-3 with CosineAnnealingLR,0.145139,yes
+R16,LR=3e-3 with CosineAnnealingLR,0.143712,yes
+R17,LR=4e-3 with CosineAnnealingLR,0.144742,no
+R18,CosineAnnealingLR eta_min=0 (LR=3e-3),0.144223,no
