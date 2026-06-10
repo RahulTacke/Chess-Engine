@@ -118,7 +118,10 @@ class Chess:
                                 targets = [(-1, -1), (1, -1)] if color else [(-1, 1), (1, 1)]
                         if (kingLocation[0] - file, kingLocation[1] - rank) in targets:
                             return True
-        return False                    
+        return False    
+
+    def is_in_check(self):
+        return Chess.in_check(self.board, self.white_move, self.attack_directions, self.king_locations[0 if self.white_move else 1])                
 
     # Determines if a proposed move is legal
     # Assumes start and destination are valid board sqaures
@@ -132,7 +135,7 @@ class Chess:
         distY = dest[1] - start[1]
         if self.white_move != self.board[start][1]:
             return False
-        if piece == "P" and (distX == 0) == (bool(self.board[dest]) or (self.en_passant == dest[0] and (start[1] == 4 if self.white_move else start[1] == 3))):
+        if piece == "P" and (distX == 0) == (bool(self.board[dest]) or (self.en_passant is not False and self.en_passant == dest[0] and (start[1] == 4 if self.white_move else start[1] == 3))):
             return False
         if self.board[dest] and self.board[dest][1] == self.white_move:
             return False
@@ -258,6 +261,14 @@ class Chess:
         self.white_move = not self.white_move
         if self.en_passant is not False:
             self.tensor[7, self.en_passant, :] = 1 if self.white_move else -1
+
+    @staticmethod
+    def convert_coords(location):
+        if isinstance(location, str):
+            return (["A", "B", "C", "D", "E", "F", "G", "H"].index(location[0]), int(location[1]) - 1)
+        if isinstance(location, tuple):
+            return ["A", "B", "C", "D", "E", "F", "G", "H"][location[0]] + str(location[1] + 1)
+        raise TypeError()
 
     def _precompute_piece_movements(self):
         piece_movements = [[[[] for i in range(7)] for j in range(8)] for k in range(8)]
