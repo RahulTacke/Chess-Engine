@@ -1,5 +1,46 @@
+import os
+import math
+import importlib.util
 import numpy as np
 import Chess
+
+# ─────────────────────────────────────────────
+# Trained CNN evaluator (Training/final_model.pt)
+# Set USE_NN = False to fall back to the pure PST/material eval.
+# ─────────────────────────────────────────────
+
+USE_NN   = True
+NN_BLEND = 0.7   # leaf score = NN_BLEND * CNN + (1 - NN_BLEND) * PST/material
+
+_MODEL = None
+
+def _load_model():
+    global _MODEL
+    if _MODEL is None:
+        import torch
+        here = os.path.dirname(os.path.abspath(__file__))
+        # The checkpoint matches Training/Evaluation.py, not the root copy,
+        # so load that module explicitly to avoid the name clash.
+        spec = importlib.util.spec_from_file_location(
+            "training_eval", os.path.join(here, "Training", "Evaluation.py"))
+        te = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(te)
+        model = te.Evaluation()
+        model.load_state_dict(torch.load(
+            os.path.join(here, "Training", "final_model.pt"), map_location="cpu"))
+        model.eval()
+        torch.set_num_threads(1)
+        _MODEL = model
+    return _MODEL
+
+def nn_evaluate(game) -> float:
+    """CNN leaf value in centipawns (White's perspective)."""
+    import torch
+    x = torch.from_numpy(game.tensor).unsqueeze(0).float()
+    with torch.no_grad():
+        v = float(_load_model()(x))          # tanh(cp/4), in (-1, 1)
+    v = max(-0.999, min(0.999, v))           # avoid atanh blow-up at the edges
+    return 4.0 * math.atanh(v) * 100.0       # invert tanh(cp/4) → centipawns
 
 # ─────────────────────────────────────────────
 # Piece-square tables (White's perspective; mirrored for Black)
@@ -85,12 +126,10 @@ def _pst_index(file: int, rank: int, white: bool) -> int:
     return row * 8 + file
 
 
-def evaluate(game: Chess) -> int:
+def pst_evaluate(game: Chess) -> int:
     """
     Static board evaluation in centipawns from White's perspective.
     Positive = White is better; Negative = Black is better.
-    Returns +100000 / -100000 as mate proxies (not used directly —
-    the search detects no-moves and scores accordingly).
     """
     score = 0
     for (file, rank), square in np.ndenumerate(game.board):
@@ -104,6 +143,17 @@ def evaluate(game: Chess) -> int:
         else:
             score -= material + positional
     return score
+
+
+def evaluate(game: Chess) -> float:
+    """
+    Leaf evaluation in centipawns (White's perspective). Blends the trained
+    CNN with the PST/material eval so saturated CNN values in clearly winning
+    positions still convert. Falls back to PST alone when USE_NN is False.
+    """
+    if not USE_NN:
+        return pst_evaluate(game)
+    return NN_BLEND * nn_evaluate(game) + (1 - NN_BLEND) * pst_evaluate(game)
 
 
 # ─────────────────────────────────────────────
