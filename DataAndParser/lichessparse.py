@@ -71,10 +71,8 @@ def processGame(currentHeaders, currentMoves):
                 m = re.search(r'\[%eval ([^\]]+)\]', comment)
                 if m:
                     evalStr = m.group(1)
-                    if evalStr.startswith("-#"):
-                        evalVal = -1.0
-                    elif evalStr.startswith("#"):
-                        evalVal = 1.0
+                    if "#" in evalStr:
+                        evalVal = -1.0 if "-" in evalStr else 1.0
                     else:
                         evalVal = math.tanh(float(evalStr) / 4.0)
                     gameBoards.append(boardToTensor(board))
