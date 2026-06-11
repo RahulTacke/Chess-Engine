@@ -1,4 +1,5 @@
 import os
+import time
 import importlib.util
 import numpy as np
 import torch
@@ -267,7 +268,7 @@ def alpha_beta(game: Chess, depth: int, alpha: float, beta: float, maximizing: b
 # Iterative Deepening
 # ─────────────────────────────────────────────
 
-def best_move(game: Chess, max_depth: int = 4):
+def best_move(game: Chess, max_depth: int = 5, time_limit: float = None):
     """
     Return the best (start, dest, promotion) triple for the current player
     using iterative deepening alpha-beta search up to max_depth.
@@ -277,13 +278,20 @@ def best_move(game: Chess, max_depth: int = 4):
     list for the next iteration, improving alpha-beta cut-offs and making
     each successive search significantly faster in practice.
 
+    If time_limit (seconds) is provided, the next depth is skipped whenever
+    the previous depth's elapsed time × 3 exceeds the remaining budget.
+    The returned move always comes from a fully completed depth.
+
     Returns None if the position has no legal moves (game over).
     """
+
     moves = game.all_moves()
     if not moves:
         return None
 
-    maximizing = game.white_move   # White maximises, Black minimises
+    maximizing      = game.white_move
+    t_start         = time.perf_counter()
+    prev_depth_time = 0.0
 
     board_snapshot    = game.board.copy()
     castle_snapshot   = [list(row) for row in game.castle_rights]
@@ -300,18 +308,26 @@ def best_move(game: Chess, max_depth: int = 4):
         game.king_locations = list(king_snap)
         game.tensor         = tensor_snap.copy()
 
-    best       = moves[0]   # fallback: always have something to return
-    prev_score = 0          # centre of the aspiration window (updated each iteration)
-    DELTA      = 50         # initial half-width in centipawns
+    best       = moves[0]
+    prev_score = 0
+    DELTA      = 50
 
     for depth in range(1, max_depth + 1):
+        # ── Time guard ────────────────────────────────────────────────
+        # Each depth is roughly b× slower than the last (b ≈ 6–10 with
+        # alpha-beta + ID). Using 3 as a conservative lower bound means
+        # we only skip a depth if we're confident it won't finish.
+        if time_limit is not None and depth > 1 and prev_depth_time > 0:
+            remaining = time_limit - (time.perf_counter() - t_start)
+            if prev_depth_time * 3 > remaining:
+                break
+
+        depth_start   = time.perf_counter()
         ordered_moves = [best] + [m for m in moves if m != best]
 
         # ── Aspiration window ─────────────────────────────────────────
-        # Start with a narrow window around the previous iteration's score.
-        # Widen exponentially on fail-high / fail-low until the search fits.
         if depth == 1:
-            alpha, beta = -INF, INF   # full window on first pass
+            alpha, beta = -INF, INF
         else:
             alpha = prev_score - DELTA
             beta  = prev_score + DELTA
@@ -336,19 +352,19 @@ def best_move(game: Chess, max_depth: int = 4):
                         current_best = (start, dest, promo)
                     beta = min(beta, best_score)
 
-            # Check whether the result fell outside the window
             if best_score <= prev_score - DELTA and depth > 1:
-                DELTA *= 2          # fail-low: widen downward and re-search
+                DELTA  = min(DELTA * 2, INF)
                 alpha  = prev_score - DELTA
             elif best_score >= prev_score + DELTA and depth > 1:
-                DELTA *= 2          # fail-high: widen upward and re-search
+                DELTA  = min(DELTA * 2, INF)
                 beta   = prev_score + DELTA
             else:
-                break               # result is within window — accept it
+                break
 
-        prev_score = best_score
-        DELTA      = 50             # reset window for next depth
-        best       = current_best
+        prev_score      = best_score
+        DELTA           = 50
+        best            = current_best
+        prev_depth_time = time.perf_counter() - depth_start
 
     return best
 
