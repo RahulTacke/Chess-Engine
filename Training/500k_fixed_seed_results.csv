@@ -1,4 +1,4 @@
-exp,description,val_loss,kept
+exp,description,val loss,kept
 0,"Baseline (no BN, GAP, Adam lr=1e-3 dropout=0.5) 500K seed=42",0.160459,yes
 R1,BatchNorm2d after each conv layer,0.155481,yes
 R2,Dual pooling GAP+GMP concatenated (no BN),0.158364,no

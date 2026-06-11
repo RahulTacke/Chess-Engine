@@ -1,4 +1,4 @@
-exp,description,val_loss,kept
+exp,description,val loss,kept
 0,"Baseline (no BN, GAP, Adam lr=1e-3 dropout=0.5)",0.168679,yes
 1,BatchNorm2d after each conv layer,0.166324,yes
 2,AdamW weight_decay=1e-4,0.175336,no
