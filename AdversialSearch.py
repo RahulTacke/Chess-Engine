@@ -1,7 +1,7 @@
 import os
-import math
 import importlib.util
 import numpy as np
+import torch
 import Chess
 
 # ─────────────────────────────────────────────
@@ -10,37 +10,41 @@ import Chess
 # ─────────────────────────────────────────────
 
 USE_NN   = True
-NN_BLEND = 0.7   # leaf score = NN_BLEND * CNN + (1 - NN_BLEND) * PST/material
+NN_BLEND = 1.0   # leaf score = NN_BLEND * CNN + (1 - NN_BLEND) * PST/material
 
-_MODEL = None
+_MODEL  = None
+_DEVICE = None
 
 def _load_model():
-    global _MODEL
+    global _MODEL, _DEVICE
     if _MODEL is None:
-        import torch
+        _DEVICE = (
+            torch.device("mps")  if torch.backends.mps.is_available() else
+            torch.device("cuda") if torch.cuda.is_available()          else
+            torch.device("cpu")
+        )
         here = os.path.dirname(os.path.abspath(__file__))
-        # The checkpoint matches Training/Evaluation.py, not the root copy,
-        # so load that module explicitly to avoid the name clash.
         spec = importlib.util.spec_from_file_location(
             "training_eval", os.path.join(here, "Training", "Evaluation.py"))
         te = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(te)
         model = te.Evaluation()
         model.load_state_dict(torch.load(
-            os.path.join(here, "Training", "final_model.pt"), map_location="cpu"))
+            os.path.join(here, "Training", "final_model.pt"),
+            map_location=_DEVICE))
+        model.to(_DEVICE)
         model.eval()
-        torch.set_num_threads(1)
+        print(f"[AdversialSearch] inference device: {_DEVICE}")
         _MODEL = model
     return _MODEL
 
 def nn_evaluate(game) -> float:
     """CNN leaf value in centipawns (White's perspective)."""
-    import torch
-    x = torch.from_numpy(game.tensor).unsqueeze(0).float()
+    model = _load_model()
+    x = torch.from_numpy(game.tensor).unsqueeze(0).float().to(_DEVICE)
     with torch.no_grad():
-        v = float(_load_model()(x))          # tanh(cp/4), in (-1, 1)
-    v = max(-0.999, min(0.999, v))           # avoid atanh blow-up at the edges
-    return 4.0 * math.atanh(v) * 100.0       # invert tanh(cp/4) → centipawns
+        v = model(x).squeeze().clamp(-0.999, 0.999)
+        return float(4.0 * torch.atanh(v) * 100.0)  # single .cpu() transfer via float()
 
 # ─────────────────────────────────────────────
 # Piece-square tables (White's perspective; mirrored for Black)
@@ -210,6 +214,30 @@ def alpha_beta(game: Chess, depth: int, alpha: float, beta: float, maximizing: b
         game.king_locations = list(king_snap)
         game.tensor         = tensor_snap.copy()
 
+    # ── Batched leaf evaluation at depth 1 ───────────────────────────
+    if depth == 1 and USE_NN:
+        batch_tensors = []
+        for start, dest, promo in moves:
+            game.play_unchecked_move(start, dest, promo)
+            batch_tensors.append(game.tensor.copy())
+            restore()
+
+        model = _load_model()
+        batch = torch.from_numpy(np.stack(batch_tensors)).float().to(_DEVICE)
+        with torch.no_grad():
+            scores_t = 4.0 * torch.atanh(model(batch).squeeze(1).clamp(-0.999, 0.999)) * 100.0
+            if NN_BLEND >= 1.0:
+                return float(scores_t.max() if maximizing else scores_t.min())
+            nn_vals = scores_t.cpu().tolist()
+
+        scores = []
+        for j, (start, dest, promo) in enumerate(moves):
+            game.play_unchecked_move(start, dest, promo)
+            pst_cp = pst_evaluate(game)
+            restore()
+            scores.append(NN_BLEND * nn_vals[j] + (1 - NN_BLEND) * pst_cp)
+        return max(scores) if maximizing else min(scores)
+
     # ── MAX node (White to move) ──────────────────────────────────────
     if maximizing:
         value = -INF
@@ -272,31 +300,55 @@ def best_move(game: Chess, max_depth: int = 4):
         game.king_locations = list(king_snap)
         game.tensor         = tensor_snap.copy()
 
-    best = moves[0]   # fallback: always have something to return
+    best       = moves[0]   # fallback: always have something to return
+    prev_score = 0          # centre of the aspiration window (updated each iteration)
+    DELTA      = 50         # initial half-width in centipawns
 
     for depth in range(1, max_depth + 1):
-        # Put the previous iteration's best move first to improve pruning
         ordered_moves = [best] + [m for m in moves if m != best]
 
-        current_best  = ordered_moves[0]
-        alpha         = -INF
-        beta          = INF
+        # ── Aspiration window ─────────────────────────────────────────
+        # Start with a narrow window around the previous iteration's score.
+        # Widen exponentially on fail-high / fail-low until the search fits.
+        if depth == 1:
+            alpha, beta = -INF, INF   # full window on first pass
+        else:
+            alpha = prev_score - DELTA
+            beta  = prev_score + DELTA
 
-        for start, dest, promo in ordered_moves:
-            game.play_unchecked_move(start, dest, promo)
-            score = alpha_beta(game, depth - 1, alpha, beta, not maximizing)
-            restore()
+        while True:
+            current_best = ordered_moves[0]
+            best_score   = -INF if maximizing else INF
 
-            if maximizing:
-                if score > alpha:
-                    alpha        = score
-                    current_best = (start, dest, promo)
+            for start, dest, promo in ordered_moves:
+                game.play_unchecked_move(start, dest, promo)
+                score = alpha_beta(game, depth - 1, alpha, beta, not maximizing)
+                restore()
+
+                if maximizing:
+                    if score > best_score:
+                        best_score   = score
+                        current_best = (start, dest, promo)
+                    alpha = max(alpha, best_score)
+                else:
+                    if score < best_score:
+                        best_score   = score
+                        current_best = (start, dest, promo)
+                    beta = min(beta, best_score)
+
+            # Check whether the result fell outside the window
+            if best_score <= prev_score - DELTA and depth > 1:
+                DELTA *= 2          # fail-low: widen downward and re-search
+                alpha  = prev_score - DELTA
+            elif best_score >= prev_score + DELTA and depth > 1:
+                DELTA *= 2          # fail-high: widen upward and re-search
+                beta   = prev_score + DELTA
             else:
-                if score < beta:
-                    beta         = score
-                    current_best = (start, dest, promo)
+                break               # result is within window — accept it
 
-        best = current_best   # carry the best move into the next iteration
+        prev_score = best_score
+        DELTA      = 50             # reset window for next depth
+        best       = current_best
 
     return best
 
