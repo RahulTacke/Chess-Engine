@@ -1,3 +1,8 @@
+"""
+Parse a Lichess PGN (.zst compressed) into board tensors and tanh-normalised
+Stockfish evaluations, saving results as dataset_N.npz chunks in Training/.
+"""
+
 import sys
 import os
 import re
@@ -19,6 +24,7 @@ PIECE_TO_PLANE = {
 }
 
 def boardToTensor(board):
+    """Convert a python-chess Board to an 8×8×8 float32 tensor matching Chess.py encoding."""
     tensor = np.zeros((8, 8, 8), dtype=np.float32)
     for piece_type in chess.PIECE_TYPES:
         plane = PIECE_TO_PLANE[piece_type]
@@ -43,6 +49,7 @@ currentHeaders = {}
 currentMoves = []
 
 def saveChunk():
+    """Flush boards/evals to a numbered .npz file and reset the accumulators."""
     global boards, evals, chunkIndex
     path = os.path.join(TRAINING_DIR, f"dataset_{chunkIndex}.npz")
     np.savez(path, boards=np.array(boards), evals=np.array(evals))
@@ -52,6 +59,7 @@ def saveChunk():
     chunkIndex += 1
 
 def processGame(currentHeaders, currentMoves):
+    """Extract (tensor, eval) pairs from one game's headers and move text; skip bots/variants/forfeits."""
     if currentHeaders.get("Termination") == "Time forfeit": return
     if "BOT" in currentHeaders.get("WhiteTitle", ""): return
     if "BOT" in currentHeaders.get("BlackTitle", ""): return

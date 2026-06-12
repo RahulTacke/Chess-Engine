@@ -1,7 +1,31 @@
+"""
+Chess game state and move generation for the chess engine.
+
+The Chess class represents a complete board position and exposes methods for
+move validation, move generation, and incremental tensor updates used by the
+CNN evaluation network.
+"""
+
 import numpy as np
 import torch
 
 class Chess:
+    """
+    Mutable chess game state.
+
+    Attributes
+    ----------
+    board           : 8×8 numpy object array of (piece, is_white) tuples or None.
+                      Indexed as board[file, rank] where file 0 = A, rank 0 = 1.
+    white_move      : True if it is White's turn.
+    castle_rights   : [[short_w, long_w], [short_b, long_b]] flags.
+    en_passant      : File index of the double-pushed pawn eligible for en-passant,
+                      or False if no en-passant is available.
+    piece_movements : Precomputed destination squares per piece type per square.
+    attack_directions: Precomputed squares that can attack each square.
+    king_locations  : [(white_file, white_rank), (black_file, black_rank)].
+    tensor          : 8×8×8 float32 numpy array encoding the position for the CNN.
+    """
     def __init__(self, test_setup=None):
         self.board = np.full((8, 8), None, dtype=object) # 8 x 8 board, None for empty squares, (piece, color) tuple for filles squares where White = True, Black = False, and indexed by file-rank (C7 => [2, 6])
         self.white_move = True # Move tracker
@@ -35,6 +59,7 @@ class Chess:
         self.tensor = self._precompute_tensor()
     
     def __str__(self):
+        """Return an ANSI-coloured board string for terminal display."""
         out = "\x1b[31m"
         out += "White\'s Turn" if self.white_move else "Black\'s Turn"
         out += "\x1b[0m\n"
@@ -53,10 +78,12 @@ class Chess:
             out += " \x1b[31m" + "ABCDEFGH"[i] + "\x1b[0m"
         return out
 
-    # Determines if a proposed move is possible on an ideal board (no pieces in the way, an opponent piece on the appropriate square if a pawn is taking diagonally, a rook if castling)
-    # Assumes start and destination are valid board sqaures
     @staticmethod
     def ideally_reachable(piece, start, distX, distY, white):
+        """Return True if piece could reach start+(distX,distY) on an empty board.
+
+        Does not check for blocking pieces; assumes start and dest are valid squares.
+        """
         if distX == 0 and distY == 0:
             return False
         match piece:
@@ -77,9 +104,9 @@ class Chess:
                     return distY == -1 or (start[1] == 6 and distY == -2)
                 return abs(distX) == 1 and (distY == 1 if white else distY == -1)
 
-    # Determines if the specified color is in check on a given board
     @staticmethod
     def in_check(board, color, attack_directions, kingLocation):
+        """Return True if the king of the given color is in check on board."""
         for (file, rank) in attack_directions[kingLocation[0]][kingLocation[1]]:
             square = board[file, rank]
             if square and square[1] != color:
@@ -121,11 +148,14 @@ class Chess:
         return False    
 
     def is_in_check(self):
-        return Chess.in_check(self.board, self.white_move, self.attack_directions, self.king_locations[0 if self.white_move else 1])                
+        """Return True if the side to move is currently in check."""
+        return Chess.in_check(self.board, self.white_move, self.attack_directions, self.king_locations[0 if self.white_move else 1])
 
-    # Determines if a proposed move is legal
-    # Assumes start and destination are valid board sqaures
     def legal_move(self, start, dest, promotion=False):
+        """Return True if (start → dest) is a legal move for the side to move.
+
+        Assumes start and dest are valid board squares.
+        """
         piece = self.board[start][0]
         if promotion and (piece != "P" or promotion not in ["Q", "R", "B", "N"] or dest[1] not in [0, 7]):
             return False
@@ -192,8 +222,8 @@ class Chess:
             checkBoard[0, start[1]] = None
         return not Chess.in_check(checkBoard, self.white_move, self.attack_directions, dest)
     
-    # Generates a list of all legal moves that the current player can play as (start, dest, promotion) triples
     def all_moves(self):
+        """Return all legal (start, dest, promotion) triples for the side to move."""
         moves = []
         for start, square in np.ndenumerate(self.board):
             if square and square[1] == self.white_move:
@@ -211,17 +241,15 @@ class Chess:
                             moves.append((start, dest, False))
         return moves
     
-    # Plays a move if it is legal, returning true if successful
-    # Updates all tracking attributes as necessary
     def play_move(self, start, dest, promotion=False):
+        """Play (start → dest) if legal; update all state and return True, else False."""
         if self.legal_move(start, dest, promotion):
             self.play_unchecked_move(start, dest, promotion)
             return True
         return False
     
-    # Plays a move without checking if it is legal
-    # Updates all tracking attributes as necessary
     def play_unchecked_move(self, start, dest, promotion=False):
+        """Play (start → dest) without legality checks; update all state."""
         if self.en_passant is not False:
             self.tensor[7, self.en_passant, :] = 0
             self.en_passant = False
@@ -264,6 +292,7 @@ class Chess:
 
     @staticmethod
     def convert_coords(location):
+        """Convert between string ("C6") and (file, rank) tuple representations."""
         if isinstance(location, str):
             return (["A", "B", "C", "D", "E", "F", "G", "H"].index(location[0]), int(location[1]) - 1)
         if isinstance(location, tuple):
@@ -271,7 +300,8 @@ class Chess:
         raise TypeError()
 
     def _precompute_piece_movements(self):
-        piece_movements = [[[[] for i in range(7)] for j in range(8)] for k in range(8)]
+        """Build lookup table: piece_movements[file][rank][piece_idx] → list of dest squares."""
+        piece_movements = [[[[] for _ in range(7)] for _ in range(8)] for _ in range(8)]
 
         for file, rank in np.ndindex(self.board.shape):
             piece_movements[file][rank][0] = [(-1, -1), (-1, 1), (1, -1), (1, 1), (-1, 0), (1, 0), (0, -1), (0, 1)]
@@ -313,7 +343,8 @@ class Chess:
         return piece_movements
     
     def _precompute_attack_directions(self):
-        attack_directions = [[[] for j in range(8)] for k in range(8)]
+        """Build lookup table: attack_directions[file][rank] → squares that can attack (file, rank)."""
+        attack_directions = [[[] for _ in range(8)] for _ in range(8)]
 
         for file, rank in np.ndindex(self.board.shape):
             for loc in [(-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1)]:
@@ -335,6 +366,7 @@ class Chess:
         return attack_directions
     
     def _precompute_tensor(self):
+        """Build the initial 8×8×8 CNN input tensor from the current board state."""
         tensor = np.zeros((8, 8, 8), dtype=np.float32)
 
         for (file, rank), square in np.ndenumerate(self.board):

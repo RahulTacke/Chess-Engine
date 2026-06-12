@@ -125,10 +125,11 @@ USE_NN = False
 ├── Main.py                    # Entry point — human vs. AI game loop
 ├── Chess.py                   # Chess game engine (board, rules, move generation)
 ├── AdversialSearch.py         # Alpha-beta search, iterative deepening, evaluation blend
+├── Evaluation.py              # Baseline CNN template (pre-experiment architecture)
 ├── ENCODING.md                # Specification for the (8,8,8) board tensor format
 │
 ├── Training/
-│   ├── Evaluation.py          # CNN architecture definition (5 conv + 4 FC layers)
+│   ├── Evaluation.py          # Final CNN architecture (refined through experiments)
 │   ├── final_train.py         # Training script (loads .npz data, trains, saves model)
 │   └── final_model.pt         # Saved model weights (produced by training)
 │
@@ -141,6 +142,8 @@ USE_NN = False
 ```
 
 ### Module descriptions
+
+**`Evaluation.py`** (root) — The original baseline CNN architecture used as the starting point for the experiment loop. Uses single global average pooling, no batch normalization, and dropout on all FC layers. The refined version produced by those experiments lives in `Training/Evaluation.py`.
 
 **`Chess.py`** — Implements the full chess ruleset: piece movement, legal move generation, check detection, castling, en passant, promotion, and an incrementally maintained `(8, 8, 8)` NumPy tensor that mirrors the board state for fast CNN inference.
 

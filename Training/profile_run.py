@@ -1,3 +1,5 @@
+"""Profile a single best_move call at a fixed depth and print the top-20 hotspots."""
+
 import cProfile
 import pstats
 import io

@@ -1,3 +1,5 @@
+"""Full training run using all available dataset chunks; saves best model to final_model.pt."""
+
 import os
 import sys
 import glob

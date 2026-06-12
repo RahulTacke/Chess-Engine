@@ -17,6 +17,7 @@ _MODEL  = None
 _DEVICE = None
 
 def _load_model():
+    """Load and cache the CNN evaluation model; auto-select MPS/CUDA/CPU device."""
     global _MODEL, _DEVICE
     if _MODEL is None:
         _DEVICE = (

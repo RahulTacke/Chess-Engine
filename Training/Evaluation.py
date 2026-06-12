@@ -1,8 +1,12 @@
+"""CNN evaluation network: 8-channel board tensor → scalar tanh position score."""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 class Evaluation(nn.Module):
+    """5-layer CNN with dual pooling and 4-layer MLP; output in (-1, 1) via tanh."""
+
     def __init__(self):
         super().__init__()
 
@@ -33,6 +37,7 @@ class Evaluation(nn.Module):
         self.dropout = nn.Dropout(p=0.2)
 
     def forward(self, x):
+        """Forward pass; x is (batch, 8, 8, 8). Returns (batch, 1) tanh score."""
         x = F.softsign(self.bn1(self.conv1(x)))
         x = F.softsign(self.bn2(self.conv2(x)))
         x = F.softsign(self.bn3(self.conv3(x)))

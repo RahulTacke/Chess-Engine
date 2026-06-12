@@ -1,7 +1,10 @@
+"""Entry point for human vs. engine play via the terminal."""
+
 import AdversialSearch as S
 from Chess import *
 
 def __main__():
+    """Run the interactive human-vs-engine game loop."""
     color = input("Choose color (B/W): ").capitalize() == "W"
 
     game = Chess()

@@ -1,3 +1,5 @@
+"""Single-experiment training run on a fixed 500K-position subset; saves best model to best_model.pt."""
+
 import os
 import sys
 import glob

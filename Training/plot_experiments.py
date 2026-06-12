@@ -15,6 +15,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 # ── Load CSV ──────────────────────────────────────────────────────────────────
 
 def load_csv(filename):
+    """Load an experiment results CSV from the script directory."""
     rows = []
     with open(os.path.join(SCRIPT_DIR, filename), newline="") as f:
         for row in csv.DictReader(f):
@@ -30,6 +31,7 @@ def load_csv(filename):
 # ── Best-so-far step line ─────────────────────────────────────────────────────
 
 def best_so_far(losses):
+    """Return a running-minimum list from a sequence of loss values."""
     best, result = float("inf"), []
     for v in losses:
         best = min(best, v)
@@ -40,6 +42,7 @@ def best_so_far(losses):
 # ── Single-phase plot ─────────────────────────────────────────────────────────
 
 def plot_phase(ax, rows, title):
+    """Plot one experiment phase: scatter of kept/rejected runs with a best-so-far step line."""
     xs     = list(range(len(rows)))
     losses = [r["val_loss"] for r in rows]
     kept   = [r["kept"]     for r in rows]
