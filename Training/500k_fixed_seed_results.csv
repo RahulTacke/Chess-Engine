@@ -17,4 +17,4 @@ R14,Dropout only after linear1 (remove from linear2 too),0.147049,no
 R15,LR=$2{\times}10^{-3}$ with CosineAnnealingLR,0.145139,yes
 R16,LR=$3{\times}10^{-3}$ with CosineAnnealingLR,0.143712,yes
 R17,LR=$4{\times}10^{-3}$ with CosineAnnealingLR,0.144742,no
-R18,"CosineAnnealingLR $\eta_{\min}=0$ (LR=$3{\times}10^{-3}$)",0.144223,no
+R18,CosineAnnealingLR $\eta_{\min}=0$ (LR=$3{\times}10^{-3}$),0.144223,no
